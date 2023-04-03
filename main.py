@@ -1,6 +1,8 @@
+import tkinter as tk
 from pathlib import Path
 
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 
 class CyberLeninka:
@@ -19,11 +21,10 @@ class CyberLeninka:
         s = Service(str(Path.cwd() / 'yandexdriver.exe'))
         self.browser = webdriver.Chrome(service=s, options=options)
 
-    def get_page(self, i):
-        url = f"https://cyberleninka.ru/article/c/mathematics/{i}"
+    def get_page(self, base, i):
+        url = f"https://cyberleninka.ru{base}/{i}"
+        print(url)
         self.browser.get(url)
-        WebDriverWait(self.browser, 200).until(
-            EC.title_contains("Темы научных статей по математике из каталога электронной библиотеки КиберЛенинка"))
 
     def get_element_web_driver_wait(self, selector, by=By.CSS_SELECTOR, delay=10):
         return WebDriverWait(self.browser, delay).until(EC.visibility_of_element_located((by, selector)))
@@ -112,13 +113,61 @@ class CyberLeninka:
 
         pd.concat([base_dataset, dataset]).to_csv(path)
 
-    def run(self, n_pages):
+    def run(self, base, n_pages):
         self.init_driver()
 
-        for i in tqdm(range(n_pages)):
-            self.get_page(i)
+        for i in trange(n_pages):
+            self.get_page(base, i)
             self.parce_page()
+
+        print("Парсинг завершён!")
+
+
+def gui_init():
+    window = tk.Tk()
+    window.title("Парсер КиберЛенинки")
+    greeting = tk.Label(text="Параметры")
+    greeting.pack()
+
+    n_pages = tk.StringVar()
+    sector = tk.StringVar()
+
+    tk.Label(text="Колчиество страниц").pack()
+    tk.Entry(textvariable=n_pages).pack()
+
+    tk.Label(text="Раздел").pack()
+
+    url = "https://cyberleninka.ru/article/"
+    page = requests.get(url)
+    soup = BeautifulSoup(page.text, "html.parser")
+    all_sector = soup.findAll('ul', attrs={"class": 'oecd'})
+
+    for el in all_sector:
+        li_arr = el.findAll("li")
+        for li in li_arr:
+            try:
+                class_li = li["class"]
+                tk.Label(text=li.text).pack()
+            except:
+                a = li.find("a", href=True)
+                if a:
+                    tk.Radiobutton(text=li.text, value=a["href"], variable=sector).pack()
+                    sector.set(a["href"])
+
+    def start_button():
+        CyberLeninka().run(base=sector.get(), n_pages=int(n_pages.get()))
+
+    tk.Button(
+        text="Запуск",
+        command=start_button,
+        width=50,
+        height=2,
+    ).pack()
+
+    window.mainloop()
 
 
 if __name__ == "__main__":
-    CyberLeninka().run(1)
+    gui_init()
+# if __name__ == "__main__":
+#     CyberLeninka().run(1)
